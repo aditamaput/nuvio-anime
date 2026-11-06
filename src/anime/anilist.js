@@ -29,16 +29,6 @@ const MEDIA_FIELDS = `
   endDate { year month day }
   studios(isMain: true) { nodes { name } }
   nextAiringEpisode { episode airingAt timeUntilAiring }
-  relations {
-    edges {
-      relationType
-      node {
-        id
-        format
-        title { romaji english native }
-      }
-    }
-  }
 `;
 
 async function request(query, variables, { token } = {}) {
