@@ -356,12 +356,12 @@ function buildLinks(media, mainSeasons = [media]) {
   const mainIds = new Set(mainSeasons.map((item) => Number(item.id)));
   const related = new Map();
   const categoryFor = (edge, node) => {
+    if (node.format === 'MOVIE') return 'Movies';
     if (edge.relationType === 'SPIN_OFF') return 'Spin-offs';
     if (edge.relationType === 'SIDE_STORY') return 'Side stories';
     if (edge.relationType === 'ALTERNATIVE') return 'Alternative versions';
     if (edge.relationType === 'SUMMARY') return 'Recaps';
     if (edge.relationType === 'ADAPTATION') return 'Adaptations';
-    if (node.format === 'MOVIE') return 'Movies';
     if (node.format === 'OVA') return 'OVA';
     if (node.format === 'ONA') return 'ONA';
     if (node.format === 'SPECIAL') return 'Specials';
