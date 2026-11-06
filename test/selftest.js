@@ -561,10 +561,9 @@ async function main() {
       assert.deepStrictEqual(chain.map((item) => item.id), [100, 101, 102]));
     check('does not merge movies or side stories', () =>
       assert.ok(!chain.some((item) => [103, 104].includes(item.id))));
-    check('does not merge a movie when the requested title is a movie', async () => {
-      const movie = await metaLib.resolveMainSeries({ id: 103, format: 'MOVIE', relations: season2.relations });
-      assert.deepStrictEqual(movie.map((item) => item.id), [103]);
-    });
+    const movie = await metaLib.resolveMainSeries({ id: 103, format: 'MOVIE', relations: season2.relations });
+    check('does not merge a movie when the requested title is a movie', () =>
+      assert.deepStrictEqual(movie.map((item) => item.id), [103]));
   } finally {
     anilistLib.mediaById = originalMediaById;
   }
