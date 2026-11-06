@@ -596,6 +596,35 @@ async function main() {
     mapper.externalId = originalExternalId;
   }
 
+  const apothecaryVideos = await metaLib.buildUnifiedVideos([
+    { id: 161645, format: 'TV', episodes: 1, airingSchedule: { nodes: [] }, nextAiringEpisode: null },
+    { id: 176301, format: 'TV', episodes: 1, airingSchedule: { nodes: [] }, nextAiringEpisode: null },
+    { id: 195516, format: 'TV', episodes: 1, airingSchedule: { nodes: [] }, nextAiringEpisode: null },
+  ], 'tt26743760', {});
+  const apothecaryS2 = apothecaryVideos.find((video) => video.id === 'tt26743760:1:25');
+  const apothecaryS3 = apothecaryVideos.find((video) => video.id === 'tt26743760:1:49');
+  check('Apothecary S2 displays as S2E1 while retaining TMDB S1E25', () =>
+    assert.deepStrictEqual(
+      { id: apothecaryS2.id, season: apothecaryS2.season, episode: apothecaryS2.episode },
+      { id: 'tt26743760:1:25', season: 2, episode: 1 }
+    ));
+  check('Apothecary S3 displays as S3E1 while retaining TMDB S1E49', () =>
+    assert.deepStrictEqual(
+      { id: apothecaryS3.id, season: apothecaryS3.season, episode: apothecaryS3.episode },
+      { id: 'tt26743760:1:49', season: 3, episode: 1 }
+    ));
+
+  const blackCloverVideos = await metaLib.buildUnifiedVideos([
+    { id: 97940, format: 'TV', episodes: 1, airingSchedule: { nodes: [] }, nextAiringEpisode: null },
+    { id: 195604, format: 'TV', episodes: 1, airingSchedule: { nodes: [] }, nextAiringEpisode: null },
+  ], 'tt7441658', {});
+  const blackCloverS2 = blackCloverVideos.find((video) => video.id === 'tt7441658:2:1');
+  check('Black Clover sequel falls back to a distinct second display/source season', () =>
+    assert.deepStrictEqual(
+      { id: blackCloverS2.id, season: blackCloverS2.season, episode: blackCloverS2.episode },
+      { id: 'tt7441658:2:1', season: 2, episode: 1 }
+    ));
+
   console.log('\\ngraphql');
   // AniList rejects a document that declares a variable it never uses, and
   // silently returns nothing useful for an enum value that does not exist.
