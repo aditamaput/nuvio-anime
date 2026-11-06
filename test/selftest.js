@@ -532,7 +532,44 @@ async function main() {
   check('missing mapping falls back to season 1', () =>
     assert.deepStrictEqual(mapper.toSeasonEpisode(null, 7), { season: 1, episode: 7 }));
 
-  console.log('\ngraphql');
+  console.log('\\nunified season chain');
+  const metaLib = require('../src/anime/meta');
+  const anilistLib = require('../src/anime/anilist');
+  const originalMediaById = anilistLib.mediaById;
+  const season1 = {
+    id: 100, format: 'TV', startDate: { year: 2020, month: 1, day: 1 },
+    relations: { edges: [{ relationType: 'PREQUEL', node: { id: 101, format: 'TV' } }] },
+  };
+  const season2 = {
+    id: 101, format: 'TV', startDate: { year: 2021, month: 1, day: 1 },
+    relations: { edges: [
+      { relationType: 'SEQUEL', node: { id: 100, format: 'TV' } },
+      { relationType: 'PREQUEL', node: { id: 102, format: 'ONA' } },
+      { relationType: 'SIDE_STORY', node: { id: 104, format: 'TV' } },
+      { relationType: 'PREQUEL', node: { id: 103, format: 'MOVIE' } },
+    ] },
+  };
+  const season3 = {
+    id: 102, format: 'ONA', startDate: { year: 2022, month: 1, day: 1 },
+    relations: { edges: [{ relationType: 'SEQUEL', node: { id: 101, format: 'TV' } }] },
+  };
+  const graph = new Map([[100, season1], [101, season2], [102, season3]]);
+  anilistLib.mediaById = async ({ id }) => graph.get(Number(id)) || null;
+  try {
+    const chain = await metaLib.resolveMainSeries(season2);
+    check('merges only PREQUEL/SEQUEL TV and ONA entries in chronological order', () =>
+      assert.deepStrictEqual(chain.map((item) => item.id), [100, 101, 102]));
+    check('does not merge movies or side stories', () =>
+      assert.ok(!chain.some((item) => [103, 104].includes(item.id))));
+    check('does not merge a movie when the requested title is a movie', async () => {
+      const movie = await metaLib.resolveMainSeries({ id: 103, format: 'MOVIE', relations: season2.relations });
+      assert.deepStrictEqual(movie.map((item) => item.id), [103]);
+    });
+  } finally {
+    anilistLib.mediaById = originalMediaById;
+  }
+
+  console.log('\\ngraphql');
   // AniList rejects a document that declares a variable it never uses, and
   // silently returns nothing useful for an enum value that does not exist.
   // Both failures look identical from the outside — an empty catalogue — so
