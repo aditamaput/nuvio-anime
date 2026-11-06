@@ -332,7 +332,7 @@ async function toFullMeta(media, cfg, requestedId) {
     runtime: canonical.duration ? `${canonical.duration} min` : undefined,
     country: canonical.countryOfOrigin || undefined,
     website: canonical.siteUrl,
-    links: buildLinks(canonical),
+    links: buildLinks(canonical, seasons),
     behaviorHints: { hasScheduledVideos: seasons.some((item) => item.status === 'RELEASING') },
   };
 
@@ -343,13 +343,49 @@ async function toFullMeta(media, cfg, requestedId) {
   }
   return meta;
 }
-function buildLinks(media) {
+function buildLinks(media, mainSeasons = [media]) {
   const links = [];
   for (const genre of media.genres || []) {
-    links.push({ name: genre, category: 'Genres', url: `stremio:///discover` });
+    links.push({ name: genre, category: 'Genres', url: 'stremio:///discover' });
   }
   if (media.siteUrl) links.push({ name: 'AniList', category: 'external', url: media.siteUrl });
-  return links;
+
+  // The metadata protocol has no portable "related meta cards" field. Expose
+  // franchise relations as honest, clickable AniList links instead of
+  // pretending they are internal Nuvio detail-page cards.
+  const mainIds = new Set(mainSeasons.map((item) => Number(item.id)));
+  const related = new Map();
+  const categoryFor = (edge, node) => {
+    if (edge.relationType === 'SPIN_OFF') return 'Spin-offs';
+    if (edge.relationType === 'SIDE_STORY') return 'Side stories';
+    if (edge.relationType === 'ALTERNATIVE') return 'Alternative versions';
+    if (edge.relationType === 'SUMMARY') return 'Recaps';
+    if (edge.relationType === 'ADAPTATION') return 'Adaptations';
+    if (node.format === 'MOVIE') return 'Movies';
+    if (node.format === 'OVA') return 'OVA';
+    if (node.format === 'ONA') return 'ONA';
+    if (node.format === 'SPECIAL') return 'Specials';
+    return 'Related anime';
+  };
+
+  for (const season of mainSeasons) {
+    for (const edge of (season.relations && season.relations.edges) || []) {
+      const node = edge && edge.node;
+      const id = Number(node && node.id);
+      if (!Number.isInteger(id) || id <= 0 || mainIds.has(id) || related.has(id)) continue;
+      const title = node.title || {};
+      const name = title.english || title.romaji || title.native || `Anime ${id}`;
+      related.set(id, {
+        name,
+        category: categoryFor(edge, node),
+        url: `https://anilist.co/anime/${id}`,
+      });
+      if (related.size >= 40) break;
+    }
+    if (related.size >= 40) break;
+  }
+
+  return links.concat([...related.values()]);
 }
 
 /**
