@@ -376,6 +376,37 @@ async function main() {
     assert.ok(entry && entry.anilistId === 161645 && entry.tmdbSeason === 1);
   });
 
+  console.log('unified franchise season resolver');
+  {
+    const anilistLib = require('../src/anime/anilist');
+    const metaLib = require('../src/anime/meta');
+    const originalAllByImdb = mapper.allByImdb;
+    const originalMediaById = anilistLib.mediaById;
+    const franchise = new Map([
+      [161645, { id: 161645, format: 'TV', startDate: { year: 2023, month: 10, day: 22 }, relations: { edges: [] } }],
+      [176301, { id: 176301, format: 'TV', startDate: { year: 2025, month: 1, day: 10 }, relations: { edges: [{ relationType: 'PREQUEL', node: { id: 161645, format: 'TV' } }] } }],
+      [195516, { id: 195516, format: 'TV', startDate: { year: 2026, month: 10, day: 2 }, relations: { edges: [
+        { relationType: 'PREQUEL', node: { id: 176301, format: 'TV' } },
+        { relationType: 'SIDE_STORY', node: { id: 195517, format: 'ONA' } },
+        { relationType: 'SIDE_STORY', node: { id: 195518, format: 'MOVIE' } },
+      ] } }],
+    ]);
+    mapper.allByImdb = (id) => id === 'tt26743760'
+      ? [...franchise.keys()].map((anilistId) => ({ anilistId }))
+      : [];
+    anilistLib.mediaById = async ({ id }) => franchise.get(Number(id)) || null;
+    try {
+      const seasons = await metaLib.resolveMainSeries(franchise.get(161645), 'tt26743760');
+      check('seeds every mapped Apothecary season even when S1 has no SEQUEL edge', () =>
+        assert.deepStrictEqual(seasons.map((item) => item.id), [161645, 176301, 195516]));
+      check('keeps side-story ONA and movie out of the main season chain', () =>
+        assert.ok(seasons.every((item) => item.id !== 195517 && item.id !== 195518)));
+    } finally {
+      mapper.allByImdb = originalAllByImdb;
+      anilistLib.mediaById = originalMediaById;
+    }
+  }
+
   const server = app.listen(0);
   await new Promise((r) => server.once('listening', r));
 
