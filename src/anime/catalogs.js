@@ -310,6 +310,44 @@ async function movies({ cfg, skip, genre, search }) {
   return list.filter((m) => allowed(m, cfg)).map((m) => meta.toPreview(m, cfg));
 }
 
+/** 🧩 OVA and Special episodes, kept out of the main season chain. */
+async function ovaAndSpecials({ cfg, skip }) {
+  const list = await browse(
+    {
+      page: pageFor(skip, cfg.pageSize),
+      perPage: cfg.pageSize,
+      sort: ['POPULARITY_DESC'],
+      format_in: ['OVA', 'SPECIAL'],
+      isAdult: cfg.includeAdult ? undefined : false,
+    },
+    6 * HOUR,
+    async () => {
+      const [ovas, specials] = await Promise.all([
+        jikan.top({ type: 'ova', page: pageFor(skip, cfg.pageSize), limit: cfg.pageSize }),
+        jikan.top({ type: 'special', page: pageFor(skip, cfg.pageSize), limit: cfg.pageSize }),
+      ]);
+      return [...ovas, ...specials];
+    }
+  );
+  return paginate(list.filter((m) => allowed(m, cfg)).map((m) => meta.toPreview(m, cfg)), skip, cfg);
+}
+
+/** 🌐 Original Net Animation, separate from the main TV season shelf. */
+async function originalNetAnimations({ cfg, skip }) {
+  const list = await browse(
+    {
+      page: pageFor(skip, cfg.pageSize),
+      perPage: cfg.pageSize,
+      sort: ['POPULARITY_DESC'],
+      format_in: ['ONA'],
+      isAdult: cfg.includeAdult ? undefined : false,
+    },
+    6 * HOUR,
+    () => jikan.top({ type: 'ona', page: pageFor(skip, cfg.pageSize), limit: cfg.pageSize })
+  );
+  return paginate(list.filter((m) => allowed(m, cfg)).map((m) => meta.toPreview(m, cfg)), skip, cfg);
+}
+
 /** 📆 Seasonal Anime — this season by default, with neighbours behind the filter. */
 async function seasonal({ cfg, skip, genre }) {
   const { season, seasonYear } = resolveSeason(genre);
@@ -477,6 +515,22 @@ const CATALOGS = [
     handler: movies,
     extra: [{ name: 'search' }, { name: 'genre', options: GENRES }, { name: 'skip' }],
     description: 'Feature films, most popular first.',
+  },
+  {
+    id: 'ova-specials',
+    name: '🧩 Anime OVA & Specials',
+    type: 'series',
+    handler: ovaAndSpecials,
+    extra: [{ name: 'skip' }],
+    description: 'OVA and special episodes, separate from main TV seasons.',
+  },
+  {
+    id: 'ona',
+    name: '🌐 Anime ONA',
+    type: 'series',
+    handler: originalNetAnimations,
+    extra: [{ name: 'skip' }],
+    description: 'Original net animations, browsable separately.',
   },
   {
     id: 'seasonal',
