@@ -241,40 +241,108 @@ async function resolveMedia(id) {
   return null;
 }
 
-/** Full meta, including the episode list Nuvio hands to the scrapers. */
+/**
+ * Follow only AniList's explicit PREQUEL/SEQUEL links between TV/ONA entries.
+ * Movies, OVAs, specials, side stories and spin-offs are deliberately excluded.
+ * A hard cap protects the meta request if AniList contains a malformed graph.
+ */
+const MAX_MAIN_SERIES_SEASONS = 12;
+const MAIN_SERIES_FORMATS = new Set(['TV', 'ONA']);
+
+async function resolveMainSeries(media) {
+  if (!media || !MAIN_SERIES_FORMATS.has(media.format)) return media ? [media] : [];
+
+  const found = new Map([[Number(media.id), media]]);
+  const queue = [media];
+
+  while (queue.length && found.size < MAX_MAIN_SERIES_SEASONS) {
+    const current = queue.shift();
+    const edges = (current.relations && current.relations.edges) || [];
+
+    for (const edge of edges) {
+      if (!edge || !['PREQUEL', 'SEQUEL'].includes(edge.relationType)) continue;
+      const node = edge.node;
+      if (!node || !MAIN_SERIES_FORMATS.has(node.format)) continue;
+
+      const relatedId = Number(node.id);
+      if (!Number.isInteger(relatedId) || relatedId <= 0 || found.has(relatedId)) continue;
+
+      const related = await anilist.mediaById({ id: relatedId });
+      if (!related || !MAIN_SERIES_FORMATS.has(related.format)) continue;
+
+      found.set(relatedId, related);
+      queue.push(related);
+      if (found.size >= MAX_MAIN_SERIES_SEASONS) break;
+    }
+  }
+
+  // Release date gives a stable chronological order, including announced
+  // sequels. Unknown dates sort after known seasons; ID breaks remaining ties.
+  return [...found.values()].sort((a, b) => {
+    const dateValue = (item) => {
+      const d = item.startDate || {};
+      if (!d.year) return Number.MAX_SAFE_INTEGER;
+      return d.year * 10000 + (d.month || 1) * 100 + (d.day || 1);
+    };
+    return dateValue(a) - dateValue(b) || Number(a.id) - Number(b.id);
+  });
+}
+
+async function buildUnifiedVideos(seasons, metaId, cfg) {
+  const combined = [];
+  for (let index = 0; index < seasons.length; index++) {
+    const seasonMedia = seasons[index];
+    const external = mapper.externalId(seasonMedia);
+    const videos = await buildVideos(seasonMedia, external, metaId, cfg, index + 1);
+    combined.push(...videos);
+  }
+
+  const seen = new Set();
+  return combined
+    .sort((a, b) => a.season - b.season || a.episode - b.episode)
+    .filter((video) => {
+      const key = `${video.season}:${video.episode}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+/** Full meta, including every linked main-series season's episode list. */
 async function toFullMeta(media, cfg, requestedId) {
-  const external = mapper.externalId(media);
+  const seasons = await resolveMainSeries(media);
+  const canonical = seasons[0] || media;
+  const external = mapper.externalId(canonical);
   const id = requestedId || external.id;
-  const type = stremioType(media, cfg);
-  const name = pickTitle(media, cfg);
+  const type = stremioType(canonical, cfg);
+  const name = pickTitle(canonical, cfg);
 
   const meta = {
     id,
     type,
     name,
-    poster: (media.coverImage && (media.coverImage.extraLarge || media.coverImage.large)) || undefined,
+    poster: (canonical.coverImage && (canonical.coverImage.extraLarge || canonical.coverImage.large)) || undefined,
     posterShape: 'poster',
-    background: media.bannerImage || undefined,
+    background: canonical.bannerImage || undefined,
     logo: undefined,
-    description: stripHtml(media.description),
-    releaseInfo: releaseInfo(media),
-    genres: media.genres || [],
-    imdbRating: media.averageScore ? (media.averageScore / 10).toFixed(1) : undefined,
-    runtime: media.duration ? `${media.duration} min` : undefined,
-    country: media.countryOfOrigin || undefined,
-    website: media.siteUrl,
-    links: buildLinks(media),
-    behaviorHints: { hasScheduledVideos: media.status === 'RELEASING' },
+    description: stripHtml(canonical.description),
+    releaseInfo: releaseInfo(canonical),
+    genres: canonical.genres || [],
+    imdbRating: canonical.averageScore ? (canonical.averageScore / 10).toFixed(1) : undefined,
+    runtime: canonical.duration ? `${canonical.duration} min` : undefined,
+    country: canonical.countryOfOrigin || undefined,
+    website: canonical.siteUrl,
+    links: buildLinks(canonical),
+    behaviorHints: { hasScheduledVideos: seasons.some((item) => item.status === 'RELEASING') },
   };
 
   if (external.entry && external.entry.imdbId) meta.imdb_id = external.entry.imdbId;
 
   if (type !== 'movie') {
-    meta.videos = await buildVideos(media, external, id, cfg);
+    meta.videos = await buildUnifiedVideos(seasons, id, cfg);
   }
   return meta;
 }
-
 function buildLinks(media) {
   const links = [];
   for (const genre of media.genres || []) {
@@ -291,13 +359,13 @@ function buildLinks(media) {
  * they belong to and how much to shift the numbers. Getting this right is what
  * lets a scraper find "S02E03" instead of failing on "S01E15".
  */
-async function buildVideos(media, external, metaId, cfg) {
+async function buildVideos(media, external, metaId, cfg, fallbackSeason = 1) {
   const aired = (media.airingSchedule && media.airingSchedule.nodes) || [];
   const total = media.episodes || (aired.length ? Math.max(...aired.map((n) => n.episode)) : 0);
   const airedByEpisode = new Map(aired.map((node) => [node.episode, node.airingAt]));
 
   let stills = null;
-  if (cfg.tmdbApiKey && external.entry && external.entry.tmdbTvId) {
+  if (cfg.tmdbApiKey && external.entry && external.entry.tmdbTvId && external.entry.tmdbSeason != null) {
     stills = await tmdb.season({
       tmdbId: external.entry.tmdbTvId,
       seasonNumber: external.entry.tmdbSeason ?? 1,
@@ -308,7 +376,9 @@ async function buildVideos(media, external, metaId, cfg) {
   const videos = [];
   const count = total || aired.length;
   for (let absolute = 1; absolute <= count; absolute++) {
-    const { season, episode } = mapper.toSeasonEpisode(external.entry, absolute);
+    const mapped = mapper.toSeasonEpisode(external.entry, absolute);
+    const season = external.entry && external.entry.tmdbSeason != null ? mapped.season : fallbackSeason;
+    const episode = mapped.episode;
     const airingAt = airedByEpisode.get(absolute);
     const still = stills ? stills.find((e) => e.episode_number === episode) : null;
 
@@ -331,7 +401,9 @@ async function buildVideos(media, external, metaId, cfg) {
   // The next episode is worth listing even before it airs — Nuvio shows it as upcoming.
   if (media.nextAiringEpisode) {
     const next = media.nextAiringEpisode;
-    const { season, episode } = mapper.toSeasonEpisode(external.entry, next.episode);
+    const mapped = mapper.toSeasonEpisode(external.entry, next.episode);
+    const season = external.entry && external.entry.tmdbSeason != null ? mapped.season : fallbackSeason;
+    const episode = mapped.episode;
     if (!videos.some((v) => v.season === season && v.episode === episode)) {
       videos.push({
         id: `${metaId}:${season}:${episode}`,
@@ -357,6 +429,8 @@ module.exports = {
   filterPreviews,
   toFullMeta,
   resolveMedia,
+  resolveMainSeries,
+  buildUnifiedVideos,
   parseId,
   timeAgo,
   formatClock,
