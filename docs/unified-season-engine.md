@@ -8,7 +8,7 @@ The resolver deliberately excludes movies, OVAs, specials, music entries, and re
 
 ## Episode identity
 
-Each linked AniList entry is fetched independently. Its own mapping entry is used to build episode coordinates. When a mapping has a TMDB season, that season and its episode offset take priority. When no TMDB season is known, the chronological position in the resolved chain is used as a conservative fallback.
+Each linked AniList entry is fetched independently. The visible Nuvio season and episode numbers restart locally for each AniList entry (for example, Season 2 Episode 1). The video ID suffix retains the source mapping's TMDB season and episode coordinates (for example, TMDB Season 1 Episode 25). This separation is essential for shows whose later AniList seasons continue inside one TMDB season. When no TMDB season is known, the chronological position in the resolved chain is used as the source-season fallback.
 
 Every video keeps the existing Nuvio/Stremio shape: id, season, episode, number, and optional release/still metadata. Duplicate season/episode pairs are removed.
 
