@@ -249,11 +249,36 @@ async function resolveMedia(id) {
 const MAX_MAIN_SERIES_SEASONS = 12;
 const MAIN_SERIES_FORMATS = new Set(['TV', 'ONA']);
 
-async function resolveMainSeries(media) {
+async function resolveMainSeries(media, requestedId) {
   if (!media || !MAIN_SERIES_FORMATS.has(media.format)) return media ? [media] : [];
 
-  const found = new Map([[Number(media.id), media]]);
-  const queue = [media];
+  const found = new Map();
+  const queue = [];
+  const addMainSeason = (candidate) => {
+    if (!candidate || !MAIN_SERIES_FORMATS.has(candidate.format)) return;
+    const id = Number(candidate.id);
+    if (!Number.isInteger(id) || id <= 0 || found.has(id)) return;
+    found.set(id, candidate);
+    queue.push(candidate);
+  };
+
+  addMainSeason(media);
+
+  // IMDb often maps every TV season to one shared show ID. AniList relation
+  // edges are not guaranteed to be mirrored on the first season, so starting
+  // from S1 alone can miss S2/S3 when only the later season declares PREQUEL.
+  // Seed the graph with every mapped AniList entry for the same IMDb show.
+  const requested = parseId(requestedId);
+  if (requested && requested.kind === 'imdb' && typeof mapper.allByImdb === 'function') {
+    const entries = mapper.allByImdb(requested.value);
+    for (const entry of entries) {
+      if (!entry || !entry.anilistId || found.size >= MAX_MAIN_SERIES_SEASONS) continue;
+      const id = Number(entry.anilistId);
+      if (!Number.isInteger(id) || id <= 0 || found.has(id)) continue;
+      const mappedSeason = await anilist.mediaById({ id });
+      addMainSeason(mappedSeason);
+    }
+  }
 
   while (queue.length && found.size < MAX_MAIN_SERIES_SEASONS) {
     const current = queue.shift();
@@ -268,10 +293,7 @@ async function resolveMainSeries(media) {
       if (!Number.isInteger(relatedId) || relatedId <= 0 || found.has(relatedId)) continue;
 
       const related = await anilist.mediaById({ id: relatedId });
-      if (!related || !MAIN_SERIES_FORMATS.has(related.format)) continue;
-
-      found.set(relatedId, related);
-      queue.push(related);
+      addMainSeason(related);
       if (found.size >= MAX_MAIN_SERIES_SEASONS) break;
     }
   }
@@ -310,7 +332,7 @@ async function buildUnifiedVideos(seasons, metaId, cfg) {
 
 /** Full meta, including every linked main-series season's episode list. */
 async function toFullMeta(media, cfg, requestedId) {
-  const seasons = await resolveMainSeries(media);
+  const seasons = await resolveMainSeries(media, requestedId);
   const canonical = seasons[0] || media;
   const external = mapper.externalId(canonical);
   // Resolve every linked season to the canonical franchise ID so a sequel
