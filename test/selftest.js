@@ -568,6 +568,34 @@ async function main() {
     anilistLib.mediaById = originalMediaById;
   }
 
+  const originalExternalId = mapper.externalId;
+  mapper.externalId = (item) => ({
+    id: 'tt1234567',
+    kind: 'imdb',
+    mapped: true,
+    entry: { tmdbSeason: 1, episodeOffset: item.id === 201 ? 24 : 0 },
+  });
+  try {
+    const combined = await metaLib.buildUnifiedVideos([
+      { id: 200, format: 'TV', episodes: 2, airingSchedule: { nodes: [] }, nextAiringEpisode: null },
+      { id: 201, format: 'TV', episodes: 2, airingSchedule: { nodes: [] }, nextAiringEpisode: null },
+    ], 'tt1234567', {});
+    const first = combined.find((video) => video.id === 'tt1234567:1:1');
+    const second = combined.find((video) => video.id === 'tt1234567:1:25');
+    check('display season numbering stays separate from mapped scraper coordinates', () => {
+      assert.deepStrictEqual(
+        { season: first.season, episode: first.episode },
+        { season: 1, episode: 1 }
+      );
+      assert.deepStrictEqual(
+        { id: second.id, season: second.season, episode: second.episode },
+        { id: 'tt1234567:1:25', season: 2, episode: 1 }
+      );
+    });
+  } finally {
+    mapper.externalId = originalExternalId;
+  }
+
   console.log('\\ngraphql');
   // AniList rejects a document that declares a variable it never uses, and
   // silently returns nothing useful for an enum value that does not exist.
