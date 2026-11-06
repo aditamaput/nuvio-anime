@@ -625,6 +625,29 @@ async function main() {
       { id: 'tt7441658:2:1', season: 2, episode: 1 }
     ));
 
+  const relationLinks = metaLib.buildLinks(
+    { genres: ['Fantasy'], siteUrl: 'https://anilist.co/anime/100' },
+    [
+      {
+        id: 100,
+        relations: { edges: [
+          { relationType: 'SEQUEL', node: { id: 101, format: 'TV', title: { english: 'Main Season 2' } } },
+          { relationType: 'SIDE_STORY', node: { id: 102, format: 'TV', title: { english: 'Side Story' } } },
+          { relationType: 'SPIN_OFF', node: { id: 103, format: 'TV', title: { english: 'Spin-off' } } },
+          { relationType: 'SIDE_STORY', node: { id: 104, format: 'MOVIE', title: { english: 'Franchise Movie' } } },
+        ] },
+      },
+      { id: 101, relations: { edges: [] } },
+    ]
+  );
+  check('franchise links exclude main seasons and classify related titles', () => {
+    assert.ok(!relationLinks.some((link) => link.name === 'Main Season 2'));
+    assert.ok(relationLinks.some((link) => link.name === 'Spin-off' && link.category === 'Spin-offs'));
+    assert.ok(relationLinks.some((link) => link.name === 'Franchise Movie' && link.category === 'Movies'));
+    assert.ok(relationLinks.some((link) => link.name === 'Side Story' && link.category === 'Side stories'));
+    assert.ok(relationLinks.every((link) => !link.url || link.url.startsWith('https://')));
+  });
+
   console.log('\\ngraphql');
   // AniList rejects a document that declares a variable it never uses, and
   // silently returns nothing useful for an enum value that does not exist.
