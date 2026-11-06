@@ -53,67 +53,60 @@ function enqueueAniList(task) {
 }
 
 async function request(query, variables, { token } = {}) {
-  return enqueueAniList(async () => {}) {
-  const headers = {
-    'content-type': 'application/json',
-    accept: 'application/json',
-    'user-agent': 'nuvio-anime-addon',
-  };
-  if (token) headers.authorization = `Bearer ${token}`;
+  return enqueueAniList(async () => {
+    const headers = {
+      'content-type': 'application/json',
+      accept: 'application/json',
+      'user-agent': 'nuvio-anime-addon',
+    };
+    if (token) headers.authorization = \`Bearer \${token}\`;
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await fetch(ENDPOINT, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ query, variables }),
-    });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const res = await fetch(ENDPOINT, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ query, variables }),
+      });
 
-    if (res.status === 429) {
-      // AniList publishes how long to wait; honour it once, then give up so a
-      // slow row never blocks the rest of the home screen.
-      const retryAfter = Number(res.headers.get('retry-after'));
-      const wait = Number.isFinite(retryAfter) && retryAfter > 0
-        ? Math.min(retryAfter, 30)
-        : Math.min(2 ** attempt, 10);
-      if (attempt === 0) {
-        await new Promise((r) => setTimeout(r, wait * 1000));
-        continue;
+      if (res.status === 429) {
+        // Honour AniList's retry window instead of retrying too early.
+        const retryAfter = Number(res.headers.get('retry-after'));
+        const wait = Number.isFinite(retryAfter) && retryAfter > 0
+          ? Math.min(retryAfter, 30)
+          : Math.min(2 ** attempt, 10);
+        if (attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, wait * 1000));
+          continue;
+        }
+        throw new Error('AniList rate limit reached');
       }
-      throw new Error('AniList rate limit reached');
+
+      const body = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        const detail =
+          body && Array.isArray(body.errors) && body.errors.length
+            ? body.errors.map((error) => error.message).join('; ')
+            : null;
+        const error = new Error(detail ? \`AniList \${res.status}: \${detail}\` : \`AniList HTTP \${res.status}\`);
+        error.status = res.status;
+        error.anilistMessage = detail;
+        error.kind =
+          res.status !== 403
+            ? 'http'
+            : detail && /\\bIP\\b|blocked/i.test(detail)
+              ? 'ip-blocked'
+              : 'api-disabled';
+        throw error;
+      }
+
+      if (!body) throw new Error(\`AniList returned an unreadable response (\${res.status})\`);
+      if (body.errors && body.errors.length) {
+        throw new Error(\`AniList: \${body.errors.map((error) => error.message).join('; ')}\`);
+      }
+      return body.data;
     }
-
-    const body = await res.json().catch(() => null);
-
-    // AniList explains itself in the response body, and the two kinds of 403
-    // mean opposite things: a site-wide "API temporarily disabled" resolves
-    // itself, while an IP block needs a different host. Throwing away the
-    // message makes those indistinguishable, so it is carried through.
-    if (!res.ok) {
-      const detail =
-        body && Array.isArray(body.errors) && body.errors.length
-          ? body.errors.map((e) => e.message).join('; ')
-          : null;
-      const error = new Error(detail ? `AniList ${res.status}: ${detail}` : `AniList HTTP ${res.status}`);
-      error.status = res.status;
-      error.anilistMessage = detail;
-      // A 403 naming the IP is a block; a 403 naming the API is an outage.
-      error.kind =
-        res.status !== 403
-          ? 'http'
-          : detail && /\bIP\b|blocked/i.test(detail)
-            ? 'ip-blocked'
-            : 'api-disabled';
-      throw error;
-    }
-
-    if (!body) throw new Error(`AniList returned an unreadable response (${res.status})`);
-    if (body.errors && body.errors.length) {
-      throw new Error(`AniList: ${body.errors.map((e) => e.message).join('; ')}`);
-    }
-    return body.data;
-  }
-  throw new Error('AniList request failed');
-
+    throw new Error('AniList request failed');
   });
 }
 
