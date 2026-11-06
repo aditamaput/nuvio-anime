@@ -329,7 +329,7 @@ async function ovaAndSpecials({ cfg, skip }) {
       return [...ovas, ...specials];
     }
   );
-  return paginate(list.filter((m) => allowed(m, cfg)).map((m) => meta.toPreview(m, cfg)), skip, cfg);
+  return list.slice(0, cfg.pageSize).filter((m) => allowed(m, cfg)).map((m) => meta.toPreview(m, cfg));
 }
 
 /** 🌐 Original Net Animation, separate from the main TV season shelf. */
@@ -345,7 +345,7 @@ async function originalNetAnimations({ cfg, skip }) {
     6 * HOUR,
     () => jikan.top({ type: 'ona', page: pageFor(skip, cfg.pageSize), limit: cfg.pageSize })
   );
-  return paginate(list.filter((m) => allowed(m, cfg)).map((m) => meta.toPreview(m, cfg)), skip, cfg);
+  return list.filter((m) => allowed(m, cfg)).map((m) => meta.toPreview(m, cfg));
 }
 
 /** 📆 Seasonal Anime — this season by default, with neighbours behind the filter. */
