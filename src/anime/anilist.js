@@ -59,7 +59,7 @@ async function request(query, variables, { token } = {}) {
       accept: 'application/json',
       'user-agent': 'nuvio-anime-addon',
     };
-    if (token) headers.authorization = \`Bearer \${token}\`;
+    if (token) headers.authorization = 'Bearer ' + token;
 
     for (let attempt = 0; attempt < 2; attempt++) {
       const res = await fetch(ENDPOINT, {
@@ -88,21 +88,21 @@ async function request(query, variables, { token } = {}) {
           body && Array.isArray(body.errors) && body.errors.length
             ? body.errors.map((error) => error.message).join('; ')
             : null;
-        const error = new Error(detail ? \`AniList \${res.status}: \${detail}\` : \`AniList HTTP \${res.status}\`);
+        const error = new Error(detail ? 'AniList ' + res.status + ': ' + detail : 'AniList HTTP ' + res.status);
         error.status = res.status;
         error.anilistMessage = detail;
         error.kind =
           res.status !== 403
             ? 'http'
-            : detail && /\\bIP\\b|blocked/i.test(detail)
+            : detail && /\bIP\b|blocked/i.test(detail)
               ? 'ip-blocked'
               : 'api-disabled';
         throw error;
       }
 
-      if (!body) throw new Error(\`AniList returned an unreadable response (\${res.status})\`);
+      if (!body) throw new Error('AniList returned an unreadable response (' + res.status + ')');
       if (body.errors && body.errors.length) {
-        throw new Error(\`AniList: \${body.errors.map((error) => error.message).join('; ')}\`);
+        throw new Error('AniList: ' + body.errors.map((error) => error.message).join('; '));
       }
       return body.data;
     }
