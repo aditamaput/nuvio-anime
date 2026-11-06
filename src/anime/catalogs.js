@@ -19,7 +19,7 @@ const GENRES = [
 
 const SEASON_OPTIONS = ['This season', 'Next season', 'Previous season'];
 
-const SERIES_FORMATS = ['TV', 'TV_SHORT', 'ONA', 'OVA', 'SPECIAL'];
+const SERIES_FORMATS = ['TV', 'TV_SHORT'];
 
 function now() {
   return Math.floor(Date.now() / 1000);
@@ -322,14 +322,16 @@ async function ovaAndSpecials({ cfg, skip }) {
     },
     6 * HOUR,
     async () => {
+      const halfPage = Math.max(1, Math.ceil(cfg.pageSize / 2));
+      const halfSkip = Math.floor((Number(skip) || 0) / halfPage);
       const [ovas, specials] = await Promise.all([
-        jikan.top({ type: 'ova', page: pageFor(skip, cfg.pageSize), limit: cfg.pageSize }),
-        jikan.top({ type: 'special', page: pageFor(skip, cfg.pageSize), limit: cfg.pageSize }),
+        jikan.top({ type: 'ova', page: halfSkip + 1, limit: halfPage }),
+        jikan.top({ type: 'special', page: halfSkip + 1, limit: halfPage }),
       ]);
       return [...ovas, ...specials];
     }
   );
-  return list.slice(0, cfg.pageSize).filter((m) => allowed(m, cfg)).map((m) => meta.toPreview(m, cfg));
+  return list.filter((m) => allowed(m, cfg)).map((m) => meta.toPreview(m, cfg));
 }
 
 /** 🌐 Original Net Animation, separate from the main TV season shelf. */
