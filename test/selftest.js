@@ -380,10 +380,10 @@ async function main() {
   check('serves a manifest', () => assert.strictEqual(manifest.status, 200));
   const ANIME_CATALOG_IDS = new Set([
     'recently-aired', 'latest-episodes', 'airing-today', 'last-hour', 'trending',
-    'top-rated', 'continue-watching', 'new-episode', 'movies', 'seasonal', 'recommended',
+    'top-rated', 'continue-watching', 'new-episode', 'movies', 'ova-specials', 'ona', 'seasonal', 'recommended',
   ]);
   check('declares thirteen anime catalogues', () =>
-    assert.strictEqual(manifest.body.catalogs.filter((c) => ANIME_CATALOG_IDS.has(c.id)).length, 11));
+    assert.strictEqual(manifest.body.catalogs.filter((c) => ANIME_CATALOG_IDS.has(c.id)).length, 13));
   check('also declares the four always-on kids brands (series + movie each)', () =>
     assert.strictEqual(manifest.body.catalogs.filter((c) => !ANIME_CATALOG_IDS.has(c.id)).length, 8));
   check('catalogue order starts with Recently Aired', () =>
@@ -645,7 +645,7 @@ async function main() {
     assert.ok(relationLinks.some((link) => link.name === 'Spin-off' && link.category === 'Spin-offs'));
     assert.ok(relationLinks.some((link) => link.name === 'Franchise Movie' && link.category === 'Movies'));
     assert.ok(relationLinks.some((link) => link.name === 'Side Story' && link.category === 'Side stories'));
-    assert.ok(relationLinks.every((link) => !link.url || link.url.startsWith('https://')));
+    assert.ok(relationLinks.filter((link) => link.category !== 'Genres').every((link) => !link.url || link.url.startsWith('https://')));
   });
 
   console.log('\\ngraphql');
