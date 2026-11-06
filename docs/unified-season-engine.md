@@ -15,7 +15,7 @@ Every video keeps the existing Nuvio/Stremio shape: id, season, episode, number,
 ## Safety and limitations
 
 - The canonical page uses the earliest dated entry in the resolved main-series chain.
-- The requested metadata ID is retained, so the caller's existing ID namespace is not silently changed.
+- For a mapped franchise, the returned metadata ID uses the canonical external IMDb/TMDB ID so every season can share one scraper identity. If no external mapping exists, the requested AniList ID is retained.
 - Dedicated Anime Movies, Anime OVA & Specials, and Anime ONA catalogues provide separate browsing shelves.
 - Franchise links are external AniList links because the current Nuvio metadata UI does not expose a portable internal related-meta card field.
 - This is metadata aggregation only; it does not add stream providers or alter scraper sources.
