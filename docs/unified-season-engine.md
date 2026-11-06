@@ -4,7 +4,7 @@
 
 A meta page may combine a title's main TV/ONA season chain. The resolver follows only AniList PREQUEL and SEQUEL relations and only accepts related entries whose format is TV or ONA.
 
-The resolver deliberately excludes movies, OVAs, specials, music entries, and relation types such as SIDE_STORY, SPIN_OFF, ALTERNATIVE, and SUMMARY. It caps the chain at 12 entries to protect request latency and avoid malformed relation graphs.
+The resolver deliberately excludes movies, OVAs, specials, music entries, and relation types such as SIDE_STORY, SPIN_OFF, ALTERNATIVE, and SUMMARY from the episode chain. Those related titles are instead exposed in the metadata `links` collection, grouped by relation/format and linked to their official AniList detail pages. This is an external-link fallback, not an internal Nuvio related-card UI. The chain is capped at 12 entries to protect request latency and avoid malformed relation graphs.
 
 ## Episode identity
 
@@ -16,6 +16,8 @@ Every video keeps the existing Nuvio/Stremio shape: id, season, episode, number,
 
 - The canonical page uses the earliest dated entry in the resolved main-series chain.
 - The requested metadata ID is retained, so the caller's existing ID namespace is not silently changed.
+- Dedicated Anime Movies, Anime OVA & Specials, and Anime ONA catalogues provide separate browsing shelves.
+- Franchise links are external AniList links because the current Nuvio metadata UI does not expose a portable internal related-meta card field.
 - This is metadata aggregation only; it does not add stream providers or alter scraper sources.
 - A live catalogue check is still required before enabling the branch in a production Nuvio installation.
 - If AniList's relation graph is incomplete or dates are missing, chronological fallback ordering may need a title-specific mapping review.
