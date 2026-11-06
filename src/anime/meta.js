@@ -313,7 +313,9 @@ async function toFullMeta(media, cfg, requestedId) {
   const seasons = await resolveMainSeries(media);
   const canonical = seasons[0] || media;
   const external = mapper.externalId(canonical);
-  const id = requestedId || external.id;
+  // Resolve every linked season to the canonical franchise ID so a sequel
+  // opened from a catalogue still plays through the mapped parent show ID.
+  const id = external.id || requestedId;
   const type = stremioType(canonical, cfg);
   const name = pickTitle(canonical, cfg);
 
