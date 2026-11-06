@@ -568,6 +568,29 @@ async function main() {
     anilistLib.mediaById = originalMediaById;
   }
 
+  const originalMetaExternalId = mapper.externalId;
+  const originalMetaMediaById = anilistLib.mediaById;
+  const canonicalFixture = {
+    id: 300, format: 'TV', title: { english: 'Canonical Series' }, episodes: 1,
+    startDate: { year: 2020, month: 1, day: 1 }, airingSchedule: { nodes: [] },
+    relations: { edges: [{ relationType: 'SEQUEL', node: { id: 301, format: 'TV' } }] },
+  };
+  const sequelFixture = {
+    id: 301, format: 'TV', title: { english: 'Canonical Series Season 2' }, episodes: 1,
+    startDate: { year: 2021, month: 1, day: 1 }, airingSchedule: { nodes: [] },
+    relations: { edges: [{ relationType: 'PREQUEL', node: { id: 300, format: 'TV' } }] },
+  };
+  anilistLib.mediaById = async ({ id }) => Number(id) === 300 ? canonicalFixture : null;
+  mapper.externalId = () => ({ id: 'tt7654321', kind: 'imdb', mapped: true, entry: null });
+  try {
+    const unifiedMeta = await metaLib.toFullMeta(sequelFixture, {}, 'anilist:301');
+    check('sequel detail resolves to canonical mapped franchise ID', () =>
+      assert.strictEqual(unifiedMeta.id, 'tt7654321'));
+  } finally {
+    mapper.externalId = originalMetaExternalId;
+    anilistLib.mediaById = originalMetaMediaById;
+  }
+
   const originalExternalId = mapper.externalId;
   mapper.externalId = (item) => ({
     id: 'tt1234567',
