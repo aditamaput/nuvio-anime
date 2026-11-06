@@ -323,9 +323,9 @@ async function ovaAndSpecials({ cfg, skip }) {
     6 * HOUR,
     async () => {
       const halfPage = Math.max(1, Math.ceil(cfg.pageSize / 2));
-      const halfSkip = Math.floor((Number(skip) || 0) / halfPage);
+      const fallbackPage = pageFor(skip, cfg.pageSize);
       const [ovas, specials] = await Promise.all([
-        jikan.top({ type: 'ova', page: halfSkip + 1, limit: halfPage }),
+        jikan.top({ type: 'ova', page: fallbackPage, limit: halfPage }),
         jikan.top({ type: 'special', page: halfSkip + 1, limit: halfPage }),
       ]);
       return [...ovas, ...specials];
