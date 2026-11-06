@@ -393,6 +393,10 @@ async function main() {
   check('movies row is typed movie', () =>
     assert.strictEqual(manifest.body.catalogs.find((c) => c.id === 'movies').type, 'movie'));
   check('is configurable', () => assert.strictEqual(manifest.body.behaviorHints.configurable, true));
+  check('claims IMDb metadata IDs so mapped anime details reach this addon', () => {
+    const metaResource = manifest.body.resources.find((resource) => resource.name === 'meta');
+    assert.ok(metaResource && metaResource.idPrefixes.includes('tt'));
+  });
 
   const cfgSegment = configLib.encode({ anilistUser: 'tester', titleLanguage: 'english', hideUnmapped: true });
   const configured = await get(server, `/${cfgSegment}/manifest.json`);
