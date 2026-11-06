@@ -326,7 +326,7 @@ async function ovaAndSpecials({ cfg, skip }) {
       const fallbackPage = pageFor(skip, cfg.pageSize);
       const [ovas, specials] = await Promise.all([
         jikan.top({ type: 'ova', page: fallbackPage, limit: halfPage }),
-        jikan.top({ type: 'special', page: halfSkip + 1, limit: halfPage }),
+        jikan.top({ type: 'special', page: fallbackPage, limit: halfPage }),
       ]);
       return [...ovas, ...specials];
     }
