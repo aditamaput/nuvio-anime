@@ -101,7 +101,7 @@ function buildManifest(cfg, baseUrl) {
       // request, the handler below tries the anime reverse-mapping first
       // (covers anime titles that happen to carry a TMDB id) before falling
       // back to the plain TMDB meta builder the kids catalogues use.
-      { name: 'meta', types: ['series', 'movie'], idPrefixes: ['anilist:', 'mal:', 'kitsu:', 'tmdb:'] },
+      { name: 'meta', types: ['series', 'movie'], idPrefixes: ['tt', 'anilist:', 'mal:', 'kitsu:', 'tmdb:'] },
     ],
     types: ['series', 'movie'],
     idPrefixes: ['tt', 'tmdb:', 'anilist:', 'mal:', 'kitsu:'],
@@ -200,7 +200,7 @@ async function metaHandler(req, res) {
   const { type, id } = req.params;
 
   try {
-    if (id.startsWith('anilist:') || id.startsWith('mal:') || id.startsWith('kitsu:')) {
+    if (id.startsWith('tt') || id.startsWith('anilist:') || id.startsWith('mal:') || id.startsWith('kitsu:')) {
       const cfg = animeConfig.parse(req.params.config);
       await mapper.load();
       const media = await animeMeta.resolveMedia(id);
