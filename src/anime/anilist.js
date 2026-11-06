@@ -31,7 +31,29 @@ const MEDIA_FIELDS = `
   nextAiringEpisode { episode airingAt timeUntilAiring }
 `;
 
+// AniList rate-limits bursts. Nuvio can request many catalogues at once,
+// so serialize GraphQL calls and leave a small gap between them. This also
+// protects metadata lookups, which do not pass through the catalogue fallback.
+let requestTail = Promise.resolve();
+let lastRequestStartedAt = 0;
+const REQUEST_INTERVAL_MS = Math.max(
+  0,
+  Number(process.env.NUVIO_ANILIST_REQUEST_INTERVAL_MS ?? 750)
+);
+
+function enqueueAniList(task) {
+  const run = requestTail.then(async () => {
+    const wait = REQUEST_INTERVAL_MS - (Date.now() - lastRequestStartedAt);
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    lastRequestStartedAt = Date.now();
+    return task();
+  });
+  requestTail = run.catch(() => {});
+  return run;
+}
+
 async function request(query, variables, { token } = {}) {
+  return enqueueAniList(async () => {}) {
   const headers = {
     'content-type': 'application/json',
     accept: 'application/json',
@@ -49,7 +71,10 @@ async function request(query, variables, { token } = {}) {
     if (res.status === 429) {
       // AniList publishes how long to wait; honour it once, then give up so a
       // slow row never blocks the rest of the home screen.
-      const wait = Math.min(Number(res.headers.get('retry-after') || 2), 5);
+      const retryAfter = Number(res.headers.get('retry-after'));
+      const wait = Number.isFinite(retryAfter) && retryAfter > 0
+        ? Math.min(retryAfter, 30)
+        : Math.min(2 ** attempt, 10);
       if (attempt === 0) {
         await new Promise((r) => setTimeout(r, wait * 1000));
         continue;
@@ -88,6 +113,8 @@ async function request(query, variables, { token } = {}) {
     return body.data;
   }
   throw new Error('AniList request failed');
+
+  });
 }
 
 /* ------------------------------------------------------------------ *
