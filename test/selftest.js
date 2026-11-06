@@ -371,6 +371,10 @@ async function main() {
   await mapper.load();
   const status = mapper.status();
   console.log(`\nmapping: ${status.anilistIds} AniList IDs\n`);
+  check('Apothecary IMDb ID resolves to the canonical first season', () => {
+    const entry = mapper.byImdb('tt26743760');
+    assert.ok(entry && entry.anilistId === 161645 && entry.tmdbSeason === 1);
+  });
 
   const server = app.listen(0);
   await new Promise((r) => server.once('listening', r));
