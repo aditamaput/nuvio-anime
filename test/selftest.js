@@ -382,7 +382,7 @@ async function main() {
     'recently-aired', 'latest-episodes', 'airing-today', 'last-hour', 'trending',
     'top-rated', 'continue-watching', 'new-episode', 'movies', 'seasonal', 'recommended',
   ]);
-  check('declares eleven anime catalogues', () =>
+  check('declares thirteen anime catalogues', () =>
     assert.strictEqual(manifest.body.catalogs.filter((c) => ANIME_CATALOG_IDS.has(c.id)).length, 11));
   check('also declares the four always-on kids brands (series + movie each)', () =>
     assert.strictEqual(manifest.body.catalogs.filter((c) => !ANIME_CATALOG_IDS.has(c.id)).length, 8));
