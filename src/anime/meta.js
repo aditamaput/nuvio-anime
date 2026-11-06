@@ -377,17 +377,21 @@ async function buildVideos(media, external, metaId, cfg, fallbackSeason = 1) {
   const count = total || aired.length;
   for (let absolute = 1; absolute <= count; absolute++) {
     const mapped = mapper.toSeasonEpisode(external.entry, absolute);
-    const season = external.entry && external.entry.tmdbSeason != null ? mapped.season : fallbackSeason;
-    const episode = mapped.episode;
+    const sourceSeason = external.entry && external.entry.tmdbSeason != null ? mapped.season : fallbackSeason;
+    const sourceEpisode = mapped.episode;
+    const displaySeason = fallbackSeason;
+    const displayEpisode = absolute;
     const airingAt = airedByEpisode.get(absolute);
-    const still = stills ? stills.find((e) => e.episode_number === episode) : null;
+    const still = stills ? stills.find((e) => e.episode_number === sourceEpisode) : null;
 
     videos.push({
-      id: `${metaId}:${season}:${episode}`,
-      title: (still && still.name) || `Episode ${absolute}`,
-      season,
-      episode,
-      number: episode,
+      // Keep scraper coordinates in the video ID while exposing local season
+      // numbering to Nuvio's season selector.
+      id: `${metaId}:${sourceSeason}:${sourceEpisode}`,
+      title: (still && still.name) || `Episode ${displayEpisode}`,
+      season: displaySeason,
+      episode: displayEpisode,
+      number: displayEpisode,
       released: airingAt
         ? new Date(airingAt * 1000).toISOString()
         : still && still.air_date
@@ -402,15 +406,17 @@ async function buildVideos(media, external, metaId, cfg, fallbackSeason = 1) {
   if (media.nextAiringEpisode) {
     const next = media.nextAiringEpisode;
     const mapped = mapper.toSeasonEpisode(external.entry, next.episode);
-    const season = external.entry && external.entry.tmdbSeason != null ? mapped.season : fallbackSeason;
-    const episode = mapped.episode;
-    if (!videos.some((v) => v.season === season && v.episode === episode)) {
+    const sourceSeason = external.entry && external.entry.tmdbSeason != null ? mapped.season : fallbackSeason;
+    const sourceEpisode = mapped.episode;
+    const displaySeason = fallbackSeason;
+    const displayEpisode = next.episode;
+    if (!videos.some((v) => v.season === displaySeason && v.episode === displayEpisode)) {
       videos.push({
-        id: `${metaId}:${season}:${episode}`,
-        title: `Episode ${next.episode}`,
-        season,
-        episode,
-        number: episode,
+        id: `${metaId}:${sourceSeason}:${sourceEpisode}`,
+        title: `Episode ${displayEpisode}`,
+        season: displaySeason,
+        episode: displayEpisode,
+        number: displayEpisode,
         released: new Date(next.airingAt * 1000).toISOString(),
       });
     }
