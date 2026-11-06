@@ -470,6 +470,7 @@ module.exports = {
   resolveMissingIds,
   filterPreviews,
   toFullMeta,
+  buildLinks,
   resolveMedia,
   resolveMainSeries,
   buildUnifiedVideos,
