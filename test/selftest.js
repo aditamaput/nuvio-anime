@@ -371,6 +371,41 @@ async function main() {
   await mapper.load();
   const status = mapper.status();
   console.log(`\nmapping: ${status.anilistIds} AniList IDs\n`);
+  check('Apothecary IMDb ID resolves to the canonical first season', () => {
+    const entry = mapper.byImdb('tt26743760');
+    assert.ok(entry && entry.anilistId === 161645 && entry.tmdbSeason === 1);
+  });
+
+  console.log('unified franchise season resolver');
+  {
+    const anilistLib = require('../src/anime/anilist');
+    const metaLib = require('../src/anime/meta');
+    const originalAllByImdb = mapper.allByImdb;
+    const originalMediaById = anilistLib.mediaById;
+    const franchise = new Map([
+      [161645, { id: 161645, format: 'TV', startDate: { year: 2023, month: 10, day: 22 }, relations: { edges: [] } }],
+      [176301, { id: 176301, format: 'TV', startDate: { year: 2025, month: 1, day: 10 }, relations: { edges: [{ relationType: 'PREQUEL', node: { id: 161645, format: 'TV' } }] } }],
+      [195516, { id: 195516, format: 'TV', startDate: { year: 2026, month: 10, day: 2 }, relations: { edges: [
+        { relationType: 'PREQUEL', node: { id: 176301, format: 'TV' } },
+        { relationType: 'SIDE_STORY', node: { id: 195517, format: 'ONA' } },
+        { relationType: 'SIDE_STORY', node: { id: 195518, format: 'MOVIE' } },
+      ] } }],
+    ]);
+    mapper.allByImdb = (id) => id === 'tt26743760'
+      ? [...franchise.keys()].map((anilistId) => ({ anilistId }))
+      : [];
+    anilistLib.mediaById = async ({ id }) => franchise.get(Number(id)) || null;
+    try {
+      const seasons = await metaLib.resolveMainSeries(franchise.get(161645), 'tt26743760');
+      check('seeds every mapped Apothecary season even when S1 has no SEQUEL edge', () =>
+        assert.deepStrictEqual(seasons.map((item) => item.id), [161645, 176301, 195516]));
+      check('keeps side-story ONA and movie out of the main season chain', () =>
+        assert.ok(seasons.every((item) => item.id !== 195517 && item.id !== 195518)));
+    } finally {
+      mapper.allByImdb = originalAllByImdb;
+      anilistLib.mediaById = originalMediaById;
+    }
+  }
 
   const server = app.listen(0);
   await new Promise((r) => server.once('listening', r));
@@ -380,10 +415,10 @@ async function main() {
   check('serves a manifest', () => assert.strictEqual(manifest.status, 200));
   const ANIME_CATALOG_IDS = new Set([
     'recently-aired', 'latest-episodes', 'airing-today', 'last-hour', 'trending',
-    'top-rated', 'continue-watching', 'new-episode', 'movies', 'seasonal', 'recommended',
+    'top-rated', 'continue-watching', 'new-episode', 'movies', 'ova-specials', 'ona', 'seasonal', 'recommended',
   ]);
-  check('declares eleven anime catalogues', () =>
-    assert.strictEqual(manifest.body.catalogs.filter((c) => ANIME_CATALOG_IDS.has(c.id)).length, 11));
+  check('declares thirteen anime catalogues', () =>
+    assert.strictEqual(manifest.body.catalogs.filter((c) => ANIME_CATALOG_IDS.has(c.id)).length, 13));
   check('also declares the four always-on kids brands (series + movie each)', () =>
     assert.strictEqual(manifest.body.catalogs.filter((c) => !ANIME_CATALOG_IDS.has(c.id)).length, 8));
   check('catalogue order starts with Recently Aired', () =>
@@ -393,6 +428,10 @@ async function main() {
   check('movies row is typed movie', () =>
     assert.strictEqual(manifest.body.catalogs.find((c) => c.id === 'movies').type, 'movie'));
   check('is configurable', () => assert.strictEqual(manifest.body.behaviorHints.configurable, true));
+  check('claims IMDb metadata IDs so mapped anime details reach this addon', () => {
+    const metaResource = manifest.body.resources.find((resource) => resource.name === 'meta');
+    assert.ok(metaResource && metaResource.idPrefixes.includes('tt'));
+  });
 
   const cfgSegment = configLib.encode({ anilistUser: 'tester', titleLanguage: 'english', hideUnmapped: true });
   const configured = await get(server, `/${cfgSegment}/manifest.json`);
@@ -532,7 +571,146 @@ async function main() {
   check('missing mapping falls back to season 1', () =>
     assert.deepStrictEqual(mapper.toSeasonEpisode(null, 7), { season: 1, episode: 7 }));
 
-  console.log('\ngraphql');
+  console.log('\\nunified season chain');
+  const metaLib = require('../src/anime/meta');
+  const anilistLib = require('../src/anime/anilist');
+  const originalMediaById = anilistLib.mediaById;
+  const season1 = {
+    id: 100, format: 'TV', startDate: { year: 2020, month: 1, day: 1 },
+    relations: { edges: [{ relationType: 'PREQUEL', node: { id: 101, format: 'TV' } }] },
+  };
+  const season2 = {
+    id: 101, format: 'TV', startDate: { year: 2021, month: 1, day: 1 },
+    relations: { edges: [
+      { relationType: 'SEQUEL', node: { id: 100, format: 'TV' } },
+      { relationType: 'PREQUEL', node: { id: 102, format: 'ONA' } },
+      { relationType: 'SIDE_STORY', node: { id: 104, format: 'TV' } },
+      { relationType: 'PREQUEL', node: { id: 103, format: 'MOVIE' } },
+    ] },
+  };
+  const season3 = {
+    id: 102, format: 'ONA', startDate: { year: 2022, month: 1, day: 1 },
+    relations: { edges: [{ relationType: 'SEQUEL', node: { id: 101, format: 'TV' } }] },
+  };
+  const graph = new Map([[100, season1], [101, season2], [102, season3]]);
+  anilistLib.mediaById = async ({ id }) => graph.get(Number(id)) || null;
+  try {
+    const chain = await metaLib.resolveMainSeries(season2);
+    check('merges only PREQUEL/SEQUEL TV and ONA entries in chronological order', () =>
+      assert.deepStrictEqual(chain.map((item) => item.id), [100, 101, 102]));
+    check('does not merge movies or side stories', () =>
+      assert.ok(!chain.some((item) => [103, 104].includes(item.id))));
+    const movie = await metaLib.resolveMainSeries({ id: 103, format: 'MOVIE', relations: season2.relations });
+    check('does not merge a movie when the requested title is a movie', () =>
+      assert.deepStrictEqual(movie.map((item) => item.id), [103]));
+  } finally {
+    anilistLib.mediaById = originalMediaById;
+  }
+
+  const originalMetaExternalId = mapper.externalId;
+  const originalMetaMediaById = anilistLib.mediaById;
+  const canonicalFixture = {
+    id: 300, format: 'TV', title: { english: 'Canonical Series' }, episodes: 1,
+    startDate: { year: 2020, month: 1, day: 1 }, airingSchedule: { nodes: [] },
+    relations: { edges: [{ relationType: 'SEQUEL', node: { id: 301, format: 'TV' } }] },
+  };
+  const sequelFixture = {
+    id: 301, format: 'TV', title: { english: 'Canonical Series Season 2' }, episodes: 1,
+    startDate: { year: 2021, month: 1, day: 1 }, airingSchedule: { nodes: [] },
+    relations: { edges: [{ relationType: 'PREQUEL', node: { id: 300, format: 'TV' } }] },
+  };
+  anilistLib.mediaById = async ({ id }) => Number(id) === 300 ? canonicalFixture : null;
+  mapper.externalId = () => ({ id: 'tt7654321', kind: 'imdb', mapped: true, entry: null });
+  try {
+    const unifiedMeta = await metaLib.toFullMeta(sequelFixture, {}, 'anilist:301');
+    check('sequel detail resolves to canonical mapped franchise ID', () =>
+      assert.strictEqual(unifiedMeta.id, 'tt7654321'));
+  } finally {
+    mapper.externalId = originalMetaExternalId;
+    anilistLib.mediaById = originalMetaMediaById;
+  }
+
+  const originalExternalId = mapper.externalId;
+  mapper.externalId = (item) => ({
+    id: 'tt1234567',
+    kind: 'imdb',
+    mapped: true,
+    entry: { tmdbSeason: 1, episodeOffset: item.id === 201 ? 24 : 0 },
+  });
+  try {
+    const combined = await metaLib.buildUnifiedVideos([
+      { id: 200, format: 'TV', episodes: 2, airingSchedule: { nodes: [] }, nextAiringEpisode: null },
+      { id: 201, format: 'TV', episodes: 2, airingSchedule: { nodes: [] }, nextAiringEpisode: null },
+    ], 'tt1234567', {});
+    const first = combined.find((video) => video.id === 'tt1234567:1:1');
+    const second = combined.find((video) => video.id === 'tt1234567:1:25');
+    check('display season numbering stays separate from mapped scraper coordinates', () => {
+      assert.deepStrictEqual(
+        { season: first.season, episode: first.episode },
+        { season: 1, episode: 1 }
+      );
+      assert.deepStrictEqual(
+        { id: second.id, season: second.season, episode: second.episode },
+        { id: 'tt1234567:1:25', season: 2, episode: 1 }
+      );
+    });
+  } finally {
+    mapper.externalId = originalExternalId;
+  }
+
+  const apothecaryVideos = await metaLib.buildUnifiedVideos([
+    { id: 161645, format: 'TV', episodes: 1, airingSchedule: { nodes: [] }, nextAiringEpisode: null },
+    { id: 176301, format: 'TV', episodes: 1, airingSchedule: { nodes: [] }, nextAiringEpisode: null },
+    { id: 195516, format: 'TV', episodes: 1, airingSchedule: { nodes: [] }, nextAiringEpisode: null },
+  ], 'tt26743760', {});
+  const apothecaryS2 = apothecaryVideos.find((video) => video.id === 'tt26743760:1:25');
+  const apothecaryS3 = apothecaryVideos.find((video) => video.id === 'tt26743760:1:49');
+  check('Apothecary S2 displays as S2E1 while retaining TMDB S1E25', () =>
+    assert.deepStrictEqual(
+      { id: apothecaryS2.id, season: apothecaryS2.season, episode: apothecaryS2.episode },
+      { id: 'tt26743760:1:25', season: 2, episode: 1 }
+    ));
+  check('Apothecary S3 displays as S3E1 while retaining TMDB S1E49', () =>
+    assert.deepStrictEqual(
+      { id: apothecaryS3.id, season: apothecaryS3.season, episode: apothecaryS3.episode },
+      { id: 'tt26743760:1:49', season: 3, episode: 1 }
+    ));
+
+  const blackCloverVideos = await metaLib.buildUnifiedVideos([
+    { id: 97940, format: 'TV', episodes: 1, airingSchedule: { nodes: [] }, nextAiringEpisode: null },
+    { id: 195604, format: 'TV', episodes: 1, airingSchedule: { nodes: [] }, nextAiringEpisode: null },
+  ], 'tt7441658', {});
+  const blackCloverS2 = blackCloverVideos.find((video) => video.id === 'tt7441658:2:1');
+  check('Black Clover sequel falls back to a distinct second display/source season', () =>
+    assert.deepStrictEqual(
+      { id: blackCloverS2.id, season: blackCloverS2.season, episode: blackCloverS2.episode },
+      { id: 'tt7441658:2:1', season: 2, episode: 1 }
+    ));
+
+  const relationLinks = metaLib.buildLinks(
+    { genres: ['Fantasy'], siteUrl: 'https://anilist.co/anime/100' },
+    [
+      {
+        id: 100,
+        relations: { edges: [
+          { relationType: 'SEQUEL', node: { id: 101, format: 'TV', title: { english: 'Main Season 2' } } },
+          { relationType: 'SIDE_STORY', node: { id: 102, format: 'TV', title: { english: 'Side Story' } } },
+          { relationType: 'SPIN_OFF', node: { id: 103, format: 'TV', title: { english: 'Spin-off' } } },
+          { relationType: 'SIDE_STORY', node: { id: 104, format: 'MOVIE', title: { english: 'Franchise Movie' } } },
+        ] },
+      },
+      { id: 101, relations: { edges: [] } },
+    ]
+  );
+  check('franchise links exclude main seasons and classify related titles', () => {
+    assert.ok(!relationLinks.some((link) => link.name === 'Main Season 2'));
+    assert.ok(relationLinks.some((link) => link.name === 'Spin-off' && link.category === 'Spin-offs'));
+    assert.ok(relationLinks.some((link) => link.name === 'Franchise Movie' && link.category === 'Movies'));
+    assert.ok(relationLinks.some((link) => link.name === 'Side Story' && link.category === 'Side stories'));
+    assert.ok(relationLinks.filter((link) => link.category !== 'Genres').every((link) => !link.url || link.url.startsWith('https://')));
+  });
+
+  console.log('\\ngraphql');
   // AniList rejects a document that declares a variable it never uses, and
   // silently returns nothing useful for an enum value that does not exist.
   // Both failures look identical from the outside — an empty catalogue — so
