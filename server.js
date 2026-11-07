@@ -81,9 +81,9 @@ function buildManifest(cfg, baseUrl) {
   ];
 
   return {
-    id: 'community.nuvio.animekids',
+    id: 'community.nuvio.animekids.preview',
     version: VERSION,
-    name: 'Nuvio Anime & Kids',
+    name: 'Nuvio Anime & Kids Preview',
     description:
       'Anime catalogues driven by the AniList airing schedule (recently aired, latest episodes, ' +
       'airing today, trending, seasonal, your own watch list) plus always-on preschool & kids ' +
